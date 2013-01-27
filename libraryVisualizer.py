@@ -1,113 +1,143 @@
 import plistlib
 import math
 import time
+import sys
+import os.path
 from random import randint
 
+PAGE_WIDTH = 2540
+MIN_FONT_SIZE = 10
+VISIBLE_FONT_HEIGHT = 6
+VISIBLE_FONT_WIDTH = 3
+CHARACTER_HEIGHT = 1
+CHARACTER_PAGE_WIDTH = .6
+DENSITY = .70
+FULL = 1
+EMPTY = 0
+LIBRARY_FILE = 'Library.xml'
+OUTPUT_FILE = 'output.html'
 
-def checkPosition(slots, elementHeight, elementWidth, top, left):
+def main(argv):
+	global LIBRARY_FILE, PAGE_WIDTH, OUTPUT_FILE
+	argv.pop(0)
+	argv += [None]
+	opts = zip(argv[0::2], argv[1::2]) 
+	for opt, arg in opts:
+		if opt == '-w' and arg.isdigit(): PAGE_WIDTH = int(arg)
+		elif opt == '-d' and arg.isdigit(): DENSITY = float(arg)
+		elif opt == '-l': LIBRARY_FILE = arg
+		elif opt == '-o': OUTPUT_FILE = arg
+		else: 
+			showHelp()
+			return
+
+	for path in [LIBRARY_FILE, OUTPUT_FILE]:
+		if '/' not in path and '\\' not in path: path = os.getcwd() +  '\\' + path
+
+	print 'Starting load...', time.time()
+	plist = plistlib.readPlist(LIBRARY_FILE)
+	print 'Load complete', time.time()
+	artistTrackCounts = countTracksPerArtist(plist['Tracks'])
+	print 'Tracks counted', time.time()
+
+	#Scale the entries so that the differences in proportion are reasonable
+	artistList, volume = scaleEntries(artistTrackCounts)
+	print 'Entries scaled', time.time()
+
+	#Sort the list from largest to smallest so that we can place the big elements first
+	artistList = sorted(artistList, key=lambda someArtist: someArtist[1], reverse=True)
+	print 'List sorted', time.time()
+	maxCount, minCount = artistList[-1][1], artistList[0][1]
+	printArtists(artistList, maxCount, minCount, volume)
+
+def showHelp():
+	print 'Valid Arguments:'
+	print '-w [width of the generated page, in pixels]'
+	print '-d [The density of the words. Recommend between .5 and .7]'
+	print '-o [The folder you want the output placed in. Default is current directory]'
+	print '-l [Full path to your library file/filename.xml, or just filename if in current directory. Default is Library.xml in current directory]'
+
+def isSubmatrixEmpty(matrix, top, left, elementHeight, elementWidth):
+	for i in range(0, elementHeight, VISIBLE_FONT_HEIGHT):
+		for j in range(0, elementWidth, VISIBLE_FONT_WIDTH):
+			if (matrix[top + i][left + j] == FULL): return False
+	return True
+
+def fillSubmatrix(matrix, top, left, elementHeight, elementWidth):
 	for i in range(elementHeight):
 		for j in range(elementWidth):
-			if (slots[top + i][left + j] == 1):
-				return True
-	return False
+			matrix[top + i][left + j] = FULL
 
-def fillPosition(slots, elementHeight, elementWidth, top, left):
-	for i in range(elementHeight):
-		for j in range(elementWidth):
-			slots[top + i][left + j] = 1
-
-def findGoodPosition(slots, elementHeight, elementWidth, top, left, height, width):
+def findEmptySubmatrix(matrix, pageHeight, PAGE_WIDTH, elementHeight, elementWidth):
 	badPosition = True
 	attempts = 0
-	while badPosition and attempts < 1000:
-		badPosition = checkPosition(slots, elementHeight, elementWidth, top, left)
-		attempts += 1
-		if badPosition:
-			top = (top + (elementHeight / 2)) % (height - elementHeight)
-		else:
-			return [top, left]
 
-def printArtists(artists, maxCount, minCount):
+	top, left =  pageHeight, PAGE_WIDTH
+	while elementWidth + left > PAGE_WIDTH: left = randint(0, PAGE_WIDTH)
+	while elementHeight + top > pageHeight: top = randint(0, pageHeight)
 
-	minSize = 10
-	charHeight = 1
-	charWidth = .6
+	#Move the element around the matrix until we find a spot that is empty
+	for i in range(pageHeight / elementHeight):
+		for j in range(PAGE_WIDTH / elementWidth):
+			if isSubmatrixEmpty(matrix, top, left, elementHeight, elementWidth):
+				return [top, left]
+			else:
+				left = (left + elementWidth) % (PAGE_WIDTH - elementWidth)
+		top = (top + elementHeight) % (pageHeight - elementHeight)
+	#Failure :(
+	return [-1, -1]
 
-	width = 2500
-	height= 3000
+def printArtists(artists, maxCount, minCount, volume):
 
-	slots = [[0 for y in range(width)] for x in range(height)]
-
-	f = open('D:\Dropbox\Dropbox\Apps\iTunesLibraryVisualizer\output.html', 'w')
+	f = open(OUTPUT_FILE, 'w+')
 	f.write("<body background='bg.jpg'>")
-	giveUps = 0
 	successes = 0
-	totalAttempts = 0
-	oobs = 0
+	failures = 0
+
+	pageHeight = int(math.ceil(volume / DENSITY / PAGE_WIDTH))
+	matrix = [[EMPTY for y in range(PAGE_WIDTH)] for x in range(pageHeight)]
+	print 'Matrix initialized', time.time()
+
 	for artist, scale in artists:
-		if scale == 1:
-			scale = minSize
+		elementHeight, elementWidth = int(math.ceil(CHARACTER_HEIGHT * scale)), int(math.ceil(CHARACTER_PAGE_WIDTH * scale)) * len(artist)
+		top, left = findEmptySubmatrix(matrix, pageHeight, PAGE_WIDTH, elementHeight, elementWidth)
+
+		if top > -1:
+			fillSubmatrix(matrix, top, left, elementHeight, elementWidth)
+			successes += 1
+			f.write("<div style='font-family: courier; font-weight: bold;position:absolute; top:" 
+				+ str(top) + "px; left:" + str(left) + "px; font-size:" + str(scale) + "px'>" + artist.encode("utf8") + "</div>")
 		else:
-			scale = (.5  + math.log(scale)) * minSize
-
-		#Figure out the iehgt/width of this element
-		elementHeight = int(math.ceil(charHeight * scale))
-		elementWidth = int(math.ceil(charWidth * scale)) * len(artist)
-
-
-		top =  height
-		left = width
-		while elementWidth + left > width:
-			left = randint(0, width)
-		while elementHeight + top > height:
-			top = randint(0, height)
-
-		position = findGoodPosition(slots, elementHeight, elementWidth, top, left, height, width)
-
-
-		if position[0] > 0:
-			fillPosition(slots, elementHeight, elementWidth, position[0], position[1])
-			successes = successes + 1
-			f.write("<div style='font-family: courier; font-weight: bold;position:absolute; top:" + str(position[0]) + "px; left:" + str(position[1]) + "px; font-size:" + str(scale) + "px'>" + artist.encode("utf8") + "</div>")
-		else:
-			print 'x, y, h, w', top, left, elementHeight, elementWidth
-			print artist, scale
-			giveUps = giveUps + 1
+			failures += 1
 	f.close()
-	print 'totalAttempts', totalAttempts
-	print 'oobs', oobs
-	print 'successes', successes
-	print 'giveups', giveUps
+	print 'Page generated', time.time()
+	print 'Placed', successes, 'elements'
+	print 'Failures ', failures
+	availableVolume = pageHeight * PAGE_WIDTH
+	print 'Available Volume', availableVolume
+	print 'Required Volume', volume
+	print 'Percent Used', float(volume) / availableVolume
 
-	f = open('D:\Dropbox\Dropbox\Apps\iTunesLibraryVisualizer\slots.txt', 'w')
+def scaleEntries(artistTrackCounts):
+	artistList = []
+	volume = 0
 
-	for line in slots:
-		for char in line:
-			f.write(str(char))
-		f.write('\n')
-	f.close()
+	for artist, count in artistTrackCounts.items():
+		if count == 1: count = MIN_FONT_SIZE
+		else: count = (.5  + math.log(count)) * MIN_FONT_SIZE
+		elementHeight = int(math.ceil(CHARACTER_HEIGHT * count))
+		elementWidth = int(math.ceil(CHARACTER_PAGE_WIDTH * count)) * len(artist)
+		volume += elementHeight * elementWidth
+		artistList.append([artist, count])
+	return artistList, volume
 
-plist = plistlib.readPlist('D:\Dropbox\Dropbox\Apps\iTunesLibraryVisualizer\Library.xml')
+def countTracksPerArtist(tracks):
+	counts = {}
 
-print 'done with load' + str(time.time())
+	for key, track in tracks.items():
+		if track.has_key('Artist'):
+			if counts.has_key(track['Artist']): counts[track['Artist']] += 1
+			else: counts[track['Artist']] = 1
+	return counts
 
-tracks = plist['Tracks']
-artistTrackCounts = {}
-ARTIST = 'Artist'
-for key, track in tracks.items():
-	if track.has_key(ARTIST):
-		if artistTrackCounts.has_key(track[ARTIST]):
-			artistTrackCounts[track[ARTIST]] += 1
-		else:
-			artistTrackCounts[track[ARTIST]] = 1
-
-artistList = []
-for artist, count in artistTrackCounts.items():
-	artistList.append([artist, count])
-
-artistList = sorted(artistList, key=lambda someArtist: someArtist[1])
-
-maxCount = artistList[0][1]
-minCount = artistList[-1][1]
-
-printArtists(reversed(artistList), maxCount, minCount)
+main(sys.argv)
