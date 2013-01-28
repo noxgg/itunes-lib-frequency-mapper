@@ -59,7 +59,6 @@ def count_tracks_per_artist(tracks):
 
 	for key, track in tracks.items():
 		if track.has_key('Artist'):
-			print track['Artist'].encode("utf8")
 			if counts.has_key(track['Artist']): counts[track['Artist']] += 1
 			else: counts[track['Artist']] = 1
 	return counts
