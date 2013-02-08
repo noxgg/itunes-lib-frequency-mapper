@@ -24,24 +24,29 @@ def main(argv):
 	global LIBRARY_FILE, PAGE_WIDTH, OUTPUT_FILE, DENSITY
 	argv.pop(0)
 	argv += [None]
-	opts = zip(argv[0::2], argv[1::2]) 
+	opts = zip(argv[0::2], argv[1::2])
 	for opt, arg in opts:
-		if opt == '-w' and arg.isdigit(): PAGE_WIDTH = int(arg)
-		elif opt == '-d' and arg.isdigit(): DENSITY = float(arg)
-		elif opt == '-l': LIBRARY_FILE = arg
-		elif opt == '-o': OUTPUT_FILE = arg
-		else: 
+		if opt == '-w' and arg.isdigit():
+			PAGE_WIDTH = int(arg)
+		elif opt == '-d' and arg.isdigit():
+			DENSITY = float(arg)
+		elif opt == '-l':
+			LIBRARY_FILE = arg
+		elif opt == '-o':
+			OUTPUT_FILE = arg
+		else:
 			show_help()
 			return
 
 	for path in [LIBRARY_FILE, OUTPUT_FILE]:
-		if '/' not in path and '\\' not in path: 
+		if '/' not in path and '\\' not in path:
 			"%s\\%s" % (os.getcwd(), path)
 
 	print 'Starting load...', time.time()
-	plist = plistlib.readPlist(LIBRARY_FILE)
+	tracks = plistlib.readPlist(LIBRARY_FILE)['Tracks']
 	print 'Load complete', time.time()
-	artist_track_counts = count_tracks_per_artist(plist['Tracks'])
+	artist_track_counts = count_tracks_per_artist(tracks)
+	artist_ratings = get_average_artist_rating(tracks)
 	print 'Tracks counted', time.time()
 
 	#Scale the entries so that the differences in proportion are reasonable
@@ -54,33 +59,50 @@ def main(argv):
 	max_count, min_count = artist_list[-1][1], artist_list[0][1]
 	print_artists(artist_list, max_count, min_count, volume)
 
+def get_average_artist_rating(tracks):
+	ratings = {}
+	for key, track in tracks.items():
+		if track.has_key('Artist') and track.has_key('Rating'):
+			artist = track['Artist']
+			if ratings.has_key(artist):
+				ratings[artist].append(track['Rating'])
+			else:
+				ratings[artist] = [track['Rating']]
+	for artist, rating in ratings.items():
+		ratings[artist] = sum(rating) / float(len(rating))
+	print ratings
+
+
 def count_tracks_per_artist(tracks):
 	counts = {}
 
 	for key, track in tracks.items():
 		if track.has_key('Artist'):
-			if counts.has_key(track['Artist']): counts[track['Artist']] += 1
-			else: counts[track['Artist']] = 1
+			if counts.has_key(track['Artist']):
+				counts[track['Artist']] += 1
+			else:
+				counts[track['Artist']] = 1
 	return counts
-
-def get_artist_rating_average(tracks):
-	return None
-
 
 def scale_entries(artist_track_counts):
 	artist_list = []
 	volume = 0
 
 	for artist, count in artist_track_counts.items():
-		if count == 1: count = MIN_FONT_SIZE
-		else: count = (.5  + math.log(count)) * MIN_FONT_SIZE
+		if count == 1:
+			count = MIN_FONT_SIZE
+		else:
+			count = (.5  + math.log(count)) * MIN_FONT_SIZE
+
 		element_height = int(math.ceil(CHARACTER_HEIGHT * count))
 		element_width = int(math.ceil(CHARACTER_PAGE_WIDTH * count)) * len(artist)
 		volume += element_height * element_width
 		artist_list.append([artist, count])
+
 	return artist_list, volume
 
 def print_artists(artists, max_count, min_count, volume):
+
 	f = open(OUTPUT_FILE, 'w+')
 	f.write("<body background='bg.jpg'>")
 	successes = 0
@@ -100,7 +122,7 @@ def print_artists(artists, max_count, min_count, volume):
 			fill_submatrix(matrix, top, left, element_height, element_width)
 			successes += 1
 			f.write(
-				"<div style='font-family: courier; font-weight: bold;position:absolute; top:%dpx; left:%dpx; font-size:%dpx'>%s</div>" 
+				"<div style='font-family: courier; font-weight: bold;position:absolute; top:%dpx; left:%dpx; font-size:%dpx'>%s</div>"
 				% (top, left, scale, artist.encode("utf8")))
 		else:
 			failures += 1
@@ -125,8 +147,7 @@ def find_empty_submatrix(
 		for j in range(PAGE_WIDTH / element_width):
 
 			if is_submatrix_empty(
-				matrix, top, left, element_height, element_width):
-				
+					matrix, top, left, element_height, element_width):
 				return [top, left]
 			else:
 				left = (left + element_width) % (PAGE_WIDTH - element_width)
@@ -137,7 +158,8 @@ def find_empty_submatrix(
 def is_submatrix_empty(matrix, top, left, element_height, element_width):
 	for i in range(0, element_height, VISIBLE_FONT_HEIGHT):
 		for j in range(0, element_width, VISIBLE_FONT_WIDTH):
-			if (matrix[top + i][left + j] == FULL): return False
+			if (matrix[top + i][left + j] == FULL):
+				return False
 	return True
 
 def fill_submatrix(matrix, top, left, element_height, element_width):
