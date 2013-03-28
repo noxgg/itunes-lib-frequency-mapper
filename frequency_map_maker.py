@@ -20,6 +20,13 @@ CHARACTER_PAGE_WIDTH = .6
 FULL = 1
 EMPTY = 0
 
+def isfloat(obj):
+	try:
+		float(obj)
+		return True
+	except:
+		return False
+
 def main(argv):
 	global LIBRARY_FILE, PAGE_WIDTH, OUTPUT_FILE, DENSITY
 	argv.pop(0)
@@ -28,7 +35,7 @@ def main(argv):
 	for opt, arg in opts:
 		if opt == '-w' and arg.isdigit():
 			PAGE_WIDTH = int(arg)
-		elif opt == '-d' and arg.isdigit():
+		elif opt == '-d' and isfloat(arg):
 			DENSITY = float(arg)
 		elif opt == '-l':
 			LIBRARY_FILE = arg

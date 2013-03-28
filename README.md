@@ -21,4 +21,4 @@ The following command line arguments provide some additional flexibility:
 	-w [the width, in pixels, of the generated page. Default: 1880]
 	-d [the density of the text. .7 is default. .5 <= x <= .75 recommended]
 	-l [Full path to Library.xml. If not given, script looks in same directory]
-	-l [Full path to place output.html. If not given, will be same directory]
+	-o [Full path to place output.html. If not given, will be same directory]
